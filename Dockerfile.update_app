@@ -1,0 +1,26 @@
+# Modifications Copyright (c) Applied Intuition, Inc.
+
+
+# Use this docker file if headless_app.py and other utility files are updated.
+
+FROM quay.io/applied_dev/applied2:trellis2-1.0.0
+
+# Set environment variable before any Python code runs
+ENV ATTN_BACKEND=flash_attn
+
+WORKDIR /app
+
+COPY headless_app.py /app/
+COPY trellis2/utils/ /app/trellis2/utils/
+
+# No need to reinstall dependencies or run other setup steps
+
+# The CMD from the base image will still apply, which runs verify_cuda.sh and then headless_app.py
+
+
+# Suppose the current version is 1.0.0, and you want to update to 1.0.1.
+# docker build -f Dockerfile.update_app -t quay.io/applied_dev/applied2:trellis2-1.0.1 .
+# docker login --username=<quay username> --password=<encrypted password> quay.io
+# docker push quay.io/applied_dev/applied2:trellis2-1.0.1
+
+
