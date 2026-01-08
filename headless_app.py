@@ -1,7 +1,8 @@
 # Modifications Copyright (c) Applied Intuition, Inc.
 
 import os
-os.environ['OPENCV_IO_ENABLE_OPENEXR'] = '1'
+
+os.environ["OPENCV_IO_ENABLE_OPENEXR"] = "1"
 os.environ["PYTORCH_CUDA_ALLOC_CONF"] = "expandable_segments:True"
 from typing import *
 import torch
@@ -57,21 +58,21 @@ app.add_middleware(
 )
 
 MAX_SEED = np.iinfo(np.int32).max
-TMP_DIR = "/tmp/sensor-sim-trellis2-shared/output"
+TMP_DIR = "/tmp/sensor-sim-trellis-shared/output"
 os.makedirs(TMP_DIR, exist_ok=True)
 
 
 def cleanup_old_files(directory: str, max_age_hours: int = 24):
     """
     Remove files older than max_age_hours from the specified directory.
-    
+
     Args:
         directory: Directory to clean up.
         max_age_hours: Maximum age of files in hours.
     """
     current_time = time.time()
     max_age_seconds = max_age_hours * 3600
-    
+
     for filename in os.listdir(directory):
         filepath = os.path.join(directory, filename)
         if os.path.isfile(filepath):
@@ -87,15 +88,15 @@ def cleanup_old_files(directory: str, max_age_hours: int = 24):
 def preprocess_images(images: List[Image.Image]) -> List[Image.Image]:
     """
     Preprocess the input images.
-    
+
     Args:
         images: List of input images.
-        
+
     Returns:
         List of preprocessed images.
-        
+
     Note:
-        TRELLIS.2 only supports single-image inference. 
+        TRELLIS.2 only supports single-image inference.
         If multiple images are provided, only the first will be used.
     """
     return [pipeline.preprocess_image(images[0])]
@@ -120,7 +121,7 @@ def image_to_3d(
 ) -> MeshWithVoxel:
     """
     Convert image(s) to 3D model.
-    
+
     Args:
         images: List of input images.
         seed: Random seed.
@@ -137,17 +138,17 @@ def image_to_3d(
         tex_slat_guidance_rescale: Texture guidance rescale.
         tex_slat_sampling_steps: Texture sampling steps.
         tex_slat_rescale_t: Texture rescale t.
-        
+
     Returns:
         The generated 3D mesh.
     """
     # Preprocess images (TRELLIS.2 only supports single image)
     # If multiple images provided, use only the first one
     processed_images = preprocess_images(images[:1])
-    
+
     # Use first image for generation
     image = processed_images[0]
-    
+
     # Run the pipeline
     outputs = pipeline.run(
         image,
@@ -177,26 +178,28 @@ def image_to_3d(
             "1536": "1536_cascade",
         }[resolution],
     )
-    
+
     mesh = outputs[0]
     mesh.simplify(16777216)  # nvdiffrast limit
-    
+
     return mesh
 
 
 def extract_glb(
     mesh: MeshWithVoxel,
+    job_id: str,
     decimation_target: int = 1000000,
     texture_size: int = 4096,
 ) -> str:
     """
     Extract a GLB file from the 3D model.
-    
+
     Args:
         mesh: The mesh to export.
+        job_id: Job ID for organizing output files.
         decimation_target: Target face count for decimation.
         texture_size: Texture resolution.
-        
+
     Returns:
         Path to the exported GLB file.
     """
@@ -206,7 +209,7 @@ def extract_glb(
         attr_volume=mesh.attrs,
         coords=mesh.coords,
         attr_layout=pipeline.pbr_attr_layout,
-        grid_size=mesh.grid_size if hasattr(mesh, 'grid_size') else 1024,
+        grid_size=mesh.grid_size if hasattr(mesh, "grid_size") else 1024,
         aabb=[[-0.5, -0.5, -0.5], [0.5, 0.5, 0.5]],
         decimation_target=decimation_target,
         texture_size=texture_size,
@@ -215,30 +218,12 @@ def extract_glb(
         remesh_project=0,
         use_tqdm=False,
     )
-    
-    # Generate unique filename
-    timestamp = time.strftime("%Y%m%d-%H%M%S")
-    glb_path = os.path.join(TMP_DIR, f'model_{timestamp}.glb')
+
+    # Generate filename using job_id directory for consistency with TRELLIS
+    glb_path = os.path.join(TMP_DIR, job_id, "model.glb")
     glb.export(glb_path, extension_webp=True)
-    
+
     return glb_path
-
-
-def pack_outputs(glb_path: str, render_video_path: str) -> dict:
-    """
-    Pack outputs into a dictionary.
-    
-    Args:
-        glb_path: Path to GLB file.
-        render_video_path: Path to render video.
-        
-    Returns:
-        Dictionary with output paths.
-    """
-    return {
-        'glb': glb_path,
-        'video': render_video_path,
-    }
 
 
 @app.get("/health")
@@ -253,31 +238,60 @@ async def health():
 async def create_3d_model_from_paths(request: Create3DModelRequestModel):
     """
     Create a 3D model from image(s).
-    
+
     Args:
         request: Request model with image paths and parameters.
-        
+
     Returns:
         Dictionary with paths to generated files.
     """
+    job_id = request.job_id
     try:
+        # Create job-specific directory
+        job_dir = os.path.join(TMP_DIR, job_id)
+        os.makedirs(job_dir, exist_ok=True)
+
         # Cleanup old files periodically
         cleanup_old_files(TMP_DIR)
-        
+
         # Get seed
-        seed = np.random.randint(0, MAX_SEED) if request.randomize_seed else request.seed
-        
+        seed = (
+            np.random.randint(0, MAX_SEED) if request.randomize_seed else request.seed
+        )
+
         # Load images
+        errors = []
         images = []
-        for image_path in request.image_paths:
+        output_image_paths = []
+        for idx, image_path in enumerate(request.image_paths):
             if not os.path.exists(image_path):
-                return {"error": f"Image not found: {image_path}"}
-            images.append(Image.open(image_path))
-        
+                error_msg = f"File not found: {image_path}"
+                errors.append(error_msg)
+                continue
+
+            try:
+                image = Image.open(image_path)
+                images.append(image)
+
+                # Save a copy of the input image to the job directory
+                base_name = os.path.splitext(os.path.basename(image_path))[0]
+                saved_image_path = os.path.join(job_dir, f"{base_name}.png")
+                image.save(saved_image_path)
+                output_image_paths.append(saved_image_path)
+            except Exception as e:
+                error_msg = f"Error opening file {image_path}: {str(e)}"
+                errors.append(error_msg)
+
+        # Check if we have any valid images
+        if not images:
+            return {"error": "No valid images found", "details": errors}
+
         # TRELLIS.2 only supports single-image inference
         if len(images) > 1:
-            print(f"Warning: Multiple images provided ({len(images)}), but TRELLIS.2 only supports single-image inference. Using only the first image.")
-        
+            print(
+                f"Warning: Multiple images provided ({len(images)}), but TRELLIS.2 only supports single-image inference. Using only the first image."
+            )
+
         # Generate 3D model
         mesh = image_to_3d(
             images=images,
@@ -296,70 +310,77 @@ async def create_3d_model_from_paths(request: Create3DModelRequestModel):
             tex_slat_sampling_steps=request.tex_slat_sampling_steps,
             tex_slat_rescale_t=request.tex_slat_rescale_t,
         )
-        
+
         # Render video
-        timestamp = time.strftime("%Y%m%d-%H%M%S")
-        video_path = os.path.join(TMP_DIR, f'video_{timestamp}.mp4')
-        video = render_utils.make_pbr_vis_frames(render_utils.render_video(mesh, envmap=envmap))
+        video_path = os.path.join(job_dir, "preview.mp4")
+        video = render_utils.make_pbr_vis_frames(
+            render_utils.render_video(mesh, envmap=envmap)
+        )
         imageio.mimsave(video_path, video, fps=15)
-        
+
         # Extract GLB
-        glb_path = extract_glb(mesh)
-        
+        glb_path = extract_glb(mesh, job_id)
+
         # Clean up GPU memory
         torch.cuda.empty_cache()
-        
-        # Return paths
-        outputs = pack_outputs(glb_path, video_path)
+
         return {
-            "success": True,
             "job_id": request.job_id,
-            "outputs": outputs,
-            "seed": seed,
+            "preview_video": video_path,
+            "glb_file": glb_path,
+            "output_images": output_image_paths,
+            "errors": errors,  # Include any errors encountered
         }
-        
+
     except Exception as e:
         import traceback
+
         error_msg = traceback.format_exc()
         print(f"Error in create_3d_model: {error_msg}")
         return {"success": False, "error": str(e), "traceback": error_msg}
 
 
-@app.get("/download/{filename}")
-async def download_file(filename: str):
+@app.get("/download/{job_id}/{filename}")
+async def download_file(job_id: str, filename: str):
     """
     Download a generated file.
-    
+
     Args:
-        filename: Name of the file to download.
-        
+        job_id: Job ID for the file.
+        filename: Name of the file to download (e.g., 'model.glb', 'preview.mp4').
+
     Returns:
         FileResponse with the requested file.
     """
-    filepath = os.path.join(TMP_DIR, filename)
+    filepath = os.path.join(TMP_DIR, job_id, filename)
     if not os.path.exists(filepath):
-        return {"error": "File not found"}
-    return FileResponse(filepath)
+        return {"error": f"File not found: {job_id}/{filename}"}
+    return FileResponse(filepath, filename=f"{job_id}_{filename}")
 
 
 if __name__ == "__main__":
     import uvicorn
-    
+
     # Load pipeline
     print("Loading TRELLIS.2 pipeline...")
     pipeline = Trellis2ImageTo3DPipeline.from_pretrained("microsoft/TRELLIS.2-4B")
     pipeline.cuda()
     print("Pipeline loaded successfully")
-    
+
     # Load environment map
     print("Loading environment map...")
-    envmap = EnvMap(torch.tensor(
-        cv2.cvtColor(cv2.imread('assets/hdri/forest.exr', cv2.IMREAD_UNCHANGED), cv2.COLOR_BGR2RGB),
-        dtype=torch.float32, device='cuda'
-    ))
+    envmap = EnvMap(
+        torch.tensor(
+            cv2.cvtColor(
+                cv2.imread("assets/hdri/forest.exr", cv2.IMREAD_UNCHANGED),
+                cv2.COLOR_BGR2RGB,
+            ),
+            dtype=torch.float32,
+            device="cuda",
+        )
+    )
     print("Environment map loaded successfully")
-    
+
     # Run server
     print("Starting server on port 8000...")
     uvicorn.run(app, host="0.0.0.0", port=8000)
-

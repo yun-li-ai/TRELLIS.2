@@ -164,15 +164,7 @@ docker run -d --gpus all -p 8000:8000 \
 curl http://localhost:8000/health
 
 # Create 3D model
-curl -X POST http://localhost:8000/create-3d-model-from-paths \
-  -H "Content-Type: application/json" \
-  -d '{
-    "image_paths": ["/path/to/image.png"],
-    "job_id": "test-job-1",
-    "seed": 42,
-    "randomize_seed": false,
-    "resolution": "1024"
-  }'
+python request_test.py 
 ```
 
 ## Managing the Container
