@@ -31,6 +31,9 @@ if __name__ == "__main__":
             "/app/assets/example_image/T.png"
         ],
         "job_id": str(uuid.uuid4())[:26],
+        "decimation_target": 1000000,
+        "texture_size": 4096,
+        "resolution": "1024",
         "seed": 42,
         "randomize_seed": False,
         "ss_guidance_strength": 7.5,
