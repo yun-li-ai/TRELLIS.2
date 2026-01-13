@@ -219,6 +219,15 @@ def extract_glb(
         use_tqdm=False,
     )
 
+    # Move pivot to bottom of the asset (matching TRELLIS behavior)
+    # Apply AFTER GLB creation to preserve texture/attribute mapping
+    # NOTE: o_voxel.postprocess.to_glb() already converts Z-up to Y-up with inverted Y
+    # So we need to adjust Y axis (index 1), not Z axis
+    vertices = glb.vertices
+    min_y = vertices[:, 1].min()
+    vertices[:, 1] -= min_y
+    glb.vertices = vertices
+
     # Generate filename using job_id directory for consistency with TRELLIS
     glb_path = os.path.join(TMP_DIR, job_id, "model.glb")
     glb.export(glb_path, extension_webp=True)

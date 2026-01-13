@@ -16,7 +16,7 @@ docker build \
 # Run without needing token at runtime
 docker run -d --gpus all -p 8000:8000 \
   --name trellis2-app \
-  -v /tmp/sensor-sim-trellis2-shared:/tmp/sensor-sim-trellis2-shared \
+  -v /tmp/sensor-sim-trellis-shared:/tmp/sensor-sim-trellis-shared \
   quay.io/applied_dev/applied2:trellis2-1.0.0
 ```
 
@@ -119,7 +119,7 @@ docker build -t quay.io/applied_dev/applied2:trellis2-1.0.0 .
 # Simple run
 docker run -d --gpus all -p 8000:8000 \
   --name trellis2-app \
-  -v /tmp/sensor-sim-trellis2-shared:/tmp/sensor-sim-trellis2-shared \
+  -v /tmp/sensor-sim-trellis-shared:/tmp/sensor-sim-trellis-shared \
   quay.io/applied_dev/applied2:trellis2-1.0.0
 ```
 
@@ -129,7 +129,7 @@ docker run -d --gpus all -p 8000:8000 \
 docker run -d --gpus all -p 8000:8000 \
   --name trellis2-app \
   -e HF_TOKEN="your_token" \
-  -v /tmp/sensor-sim-trellis2-shared:/tmp/sensor-sim-trellis2-shared \
+  -v /tmp/sensor-sim-trellis-shared:/tmp/sensor-sim-trellis-shared \
   quay.io/applied_dev/applied2:trellis2-1.0.0 \
   bash -c "huggingface-cli login --token \$HF_TOKEN && python headless_app.py"
 ```
@@ -142,7 +142,7 @@ docker run -d \
   -p 8000:8000 \
   --name trellis2-prod \
   --restart unless-stopped \
-  -v /tmp/sensor-sim-trellis2-shared:/tmp/sensor-sim-trellis2-shared \
+  -v /tmp/sensor-sim-trellis-shared:/tmp/sensor-sim-trellis-shared \
   quay.io/applied_dev/applied2:trellis2-1.0.0
 ```
 
@@ -151,7 +151,7 @@ docker run -d \
 ```bash
 docker run -d --gpus all -p 8000:8000 \
   --name trellis2-dev \
-  -v /tmp/sensor-sim-trellis2-shared:/tmp/sensor-sim-trellis2-shared \
+  -v /tmp/sensor-sim-trellis-shared:/tmp/sensor-sim-trellis-shared \
   -v /home/applied-owner/Documents/code/TRELLIS.2/headless_app.py:/app/headless_app.py \
   -v /home/applied-owner/Documents/code/TRELLIS.2/assets:/app/assets \
   quay.io/applied_dev/applied2:trellis2-1.0.0
@@ -206,7 +206,7 @@ The following environment variables are set in the container:
 
 ## Volume Mounts
 
-- `/tmp/sensor-sim-trellis2-shared/output` - Output directory for generated files
+- `/tmp/sensor-sim-trellis-shared/output` - Output directory for generated files
 
 ## Healthcheck
 
