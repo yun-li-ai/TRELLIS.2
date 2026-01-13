@@ -33,7 +33,9 @@ class Create3DModelRequestModel(BaseModel):
     job_id: str
     seed: int = 0
     randomize_seed: bool = True
-    resolution: str = "1024"
+    resolution: str = "1024" # 512, 1024, 1536
+    decimation_target: int = 1000000 # 100000 - 500000
+    texture_size: int = 4096 # 1024, 2048, 4096
     ss_guidance_strength: float = 7.5
     ss_guidance_rescale: float = 0.7
     ss_sampling_steps: int = 12
